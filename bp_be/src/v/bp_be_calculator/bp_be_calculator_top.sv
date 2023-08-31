@@ -335,7 +335,12 @@ module bp_be_calculator_top
      ,.v_o(pipe_aux_data_v_lo)
      );
 
-  // Memory pipe: 2/3 cycle latency
+  // Memory pipe: 1/2/3 cycle latency
+  logic [paddr_width_p-1:0] pipe_mem_early_addr_lo, pipe_mem_final_addr_lo, pipe_mem_wide_addr_lo;
+  logic [dpath_width_gp-1:0] pipe_mem_incr_data_lo;
+  logic pipe_mem_incr_data_lo_v;
+  logic [dcache_block_width_p-1:0] pipe_mem_wide_data_lo;
+  logic pipe_mem_wide_data_lo_v;
   bp_be_pipe_mem
    #(.bp_params_p(bp_params_p))
    pipe_mem
@@ -395,11 +400,20 @@ module bp_be_calculator_top
      ,.store_access_fault_v_o(pipe_mem_store_access_fault_lo)
      ,.store_page_fault_v_o(pipe_mem_store_page_fault_lo)
 
-     ,.early_data_o(pipe_mem_early_data_lo)
-     ,.early_v_o(pipe_mem_early_data_v_lo)
+     ,.incr_data_o(pipe_mem_incr_data_lo)
+     ,.incr_v_o(pipe_mem_incr_data_lo_v)
 
-     ,.final_data_o(pipe_mem_final_data_lo)
+     ,.early_v_o(pipe_mem_early_data_v_lo)
+     ,.early_data_o(pipe_mem_early_data_lo)
+     ,.early_addr_o(pipe_mem_early_addr_lo)
+
      ,.final_v_o(pipe_mem_final_data_v_lo)
+     ,.final_data_o(pipe_mem_final_data_lo)
+     ,.final_addr_o(pipe_mem_final_addr_lo)
+
+     ,.wide_v_o(pipe_mem_wide_data_lo_v)
+     ,.wide_data_o(pipe_mem_wide_data_lo)
+     ,.wide_addr_o(pipe_mem_wide_addr_lo)
 
      ,.late_wb_pkt_o(pipe_mem_late_wb_pkt)
      ,.late_wb_v_o(pipe_mem_late_wb_v)
@@ -499,6 +513,7 @@ module bp_be_calculator_top
       // Injected instructions can carry a payload in rs2
       comp_stage_n[0].rd_data    |= injection                  ? dispatch_pkt_cast_i.rs2  : '0;
       comp_stage_n[1].rd_data    |= pipe_int_early_data_v_lo   ? pipe_int_early_data_lo   : '0;
+      comp_stage_n[1].rd_data    |= pipe_mem_incr_data_lo_v    ? pipe_mem_incr_data_lo    : '0;
       comp_stage_n[1].rd_data    |= pipe_sys_data_v_lo         ? pipe_sys_data_lo         : '0;
       comp_stage_n[2].rd_data    |= pipe_mem_early_data_v_lo   ? pipe_mem_early_data_lo   : '0;
       comp_stage_n[2].rd_data    |= pipe_aux_data_v_lo         ? pipe_aux_data_lo         : '0;

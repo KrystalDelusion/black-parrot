@@ -698,6 +698,19 @@ module bp_be_instr_decoder
               default: begin end
             endcase
           end
+        `RV64_CUSTOM0_OP:
+          begin
+            unique casez (instr)
+              `RV64_TENSOR_WTLD0, `RV64_TENSOR_WTLD1
+              ,`RV64_TENSOR_ACLD0, `RV64_TENSOR_ACLD1:
+                begin
+                  decode_cast_o.pipe_mem_incr_v = 1'b1;
+                  decode_cast_o.irf_w_v = 1'b1;
+                  decode_cast_o.dcache_r_v = 1'b1;
+                  decode_cast_o.fu_op = e_dcache_op_bload;
+                end
+            endcase
+          end
         default : illegal_instr_o = 1'b1;
       endcase
 
@@ -716,6 +729,8 @@ module bp_be_instr_decoder
           imm_o = `rv64_signext_i_imm(instr);
         `RV64_SYSTEM_OP:
           imm_o = `rv64_signext_c_imm(instr);
+        `RV64_CUSTOM0_OP:
+          imm_o = `rv64_signext_i_imm(instr);
         //`RV64_AMO_OP:
         default: imm_o = '0;
       endcase

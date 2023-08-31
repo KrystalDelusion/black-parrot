@@ -29,6 +29,7 @@
   `define RV64_FMSUB_OP      7'b1000111
   `define RV64_FNMSUB_OP     7'b1001011
   `define RV64_FNMADD_OP     7'b1001111
+  `define RV64_CUSTOM0_OP    7'b0001011
 
   // Some useful RV64 instruction macros
   `define rv64_r_type(op, funct3, funct7) {``funct7``,{5{1'b?}},{5{1'b?}},``funct3``,{5{1'b?}},``op``}
@@ -312,6 +313,14 @@
   `define RV64_CFLDSP     `rv64_css_type(`RV64_C2_OP,3'b001)
   `define RV64_CFSWSP     `rv64_cl_type(`RV64_C2_OP,3'b111)
   `define RV64_CFSDSP     `rv64_cl_type(`RV64_C2_OP,3'b101)
+
+  // Custom
+  `define RV64_TENSOR_WTLD0 `rv64_i_type(`RV64_CUSTOM0_OP,3'b000)
+  `define RV64_TENSOR_WTLD1 `rv64_i_type(`RV64_CUSTOM0_OP,3'b001)
+  `define RV64_TENSOR_ACLD0 `rv64_i_type(`RV64_CUSTOM0_OP,3'b010)
+  `define RV64_TENSOR_ACLD1 `rv64_i_type(`RV64_CUSTOM0_OP,3'b011)
+  `define RV64_TENSOR_CSRLD `rv64_i_type(`RV64_CUSTOM0_OP,3'b100)
+  `define RV64_TENSOR_CSRST `rv64_i_type(`RV64_CUSTOM0_OP,3'b101)
 
 `endif
 
