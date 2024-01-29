@@ -86,7 +86,7 @@ ifeq ($(NBF_SKIP_ZEROS), 1)
 NBF_INPUTS += --skip_zeros
 endif
 endif
-NBF_INPUTS += --debug
+NBF_INPUTS += --boot_pc=0x80000000
 
 $(SIM_DIR)/prog.nbf: $(SIM_DIR)/cce_ucode.mem $(SIM_DIR)/prog.mem
 	cd $(@D); python $(MEM2NBF) $(NBF_INPUTS) > $@
