@@ -331,7 +331,8 @@ module bp_fe_pc_gen
   logic [vaddr_width_p-1:0] br_imm;
   wire [cinstr_width_gp-1:0] fetch_cinstr_lo = fetch_instr_i[0+:cinstr_width_gp];
   wire [cinstr_width_gp-1:0] fetch_cinstr_hi = fetch_instr_i[cinstr_width_gp+:cinstr_width_gp];
-  always_comb
+  always_comb begin
+    br_imm = '0;
     unique if (fetch_instr_scan.clow & fetch_instr_scan.jal)
       br_imm = `rv64_signext_cj_imm(fetch_cinstr_lo);
     else if (fetch_instr_scan.chigh & fetch_instr_scan.jal)
@@ -344,6 +345,7 @@ module bp_fe_pc_gen
       br_imm = `rv64_signext_j_imm(fetch_instr_i);
     else
       br_imm = `rv64_signext_b_imm(fetch_instr_i);
+  end
   wire [1:0] cimm = fetch_instr_scan.chigh ? 2'b10 : 2'b00;
 
   assign br_tgt_lo     = fetch_pc_i + br_imm + cimm;
