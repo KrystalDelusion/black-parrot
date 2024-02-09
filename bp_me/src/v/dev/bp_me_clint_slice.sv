@@ -91,6 +91,17 @@ module bp_me_clint_slice
      ,.data_o(mtimesel_r)
      );
 
+`ifdef VCU128
+  wire unused = mtime_w_v_li;
+  logic [dword_width_gp-1:0] mtime_r;
+  always_ff @(posedge clk_i) begin
+    if (reset_i) begin
+      mtime_r <= '0;
+    end else begin
+      mtime_r <= mtime_r + 'b1;
+    end
+  end
+`else
   // 8:1 downsample
   logic clk_ds_lo;
   bsg_counter_clock_downsample
@@ -134,6 +145,7 @@ module bp_me_clint_slice
     (.gray_i(mtime_gray_r)
      ,.binary_o(mtime_r)
      );
+`endif
 
   logic [dword_width_gp-1:0] mtimecmp_r;
   wire [dword_width_gp-1:0] mtimecmp_n = data_lo;
