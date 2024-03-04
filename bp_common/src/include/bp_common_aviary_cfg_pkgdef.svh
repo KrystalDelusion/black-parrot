@@ -281,11 +281,11 @@
       ,caddr_width: 32
       ,asid_width : 1
 
-      ,branch_metadata_fwd_width: 49
+      ,branch_metadata_fwd_width: 53
       ,ras_idx_width            : 4
       ,btb_tag_width            : 9
       ,btb_idx_width            : 6
-      ,bht_idx_width            : 7
+      ,bht_idx_width            : 11
       ,bht_row_els              : 4
       ,ghist_width              : 2
 

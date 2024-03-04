@@ -1,6 +1,13 @@
 `ifndef BP_COMMON_RV64_PKGDEF_SVH
 `define BP_COMMON_RV64_PKGDEF_SVH
 
+  // TODO: probably inappropriate
+  localparam fetch_width_gp          = 32;
+  localparam fetch_cinstr_gp         = fetch_width_gp / 16;
+  localparam fetch_bytes_gp          = fetch_width_gp / 8;
+  localparam fetch_ptr_gp            = `BSG_WIDTH(fetch_cinstr_gp);
+  localparam fetch_sel_gp            = `BSG_SAFE_CLOG2(fetch_cinstr_gp);
+
   localparam dword_width_gp          = 64;
   localparam word_width_gp           = 32;
   localparam half_width_gp           = 16;

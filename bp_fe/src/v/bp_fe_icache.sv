@@ -61,7 +61,6 @@ module bp_fe_icache
    // New I$ packet comes in for a fetch, fence or fill request
    // v_i is raised when there is a new request
    // yumi_o is raised when that request is accepted
-   // poison_tl_i negates the yumi_o without putting pressure on SRAM paths
    // Normally, yumi_o waits for TL to be empty so as to not lose
    //   requests. However, when we're redirecting the I$ we may want
    //   to override the TL message right away. force_i says to accept
@@ -70,7 +69,6 @@ module bp_fe_icache
    , input                                            v_i
    , input                                            force_i
    , output                                           yumi_o
-   , input                                            poison_tl_i
 
    // Cycle 1: "Tag Lookup"
    // TLB and PMA information comes in this cycle
@@ -89,15 +87,12 @@ module bp_fe_icache
    // Cache engine requests cannot be cancelled once they come here, but poison_tv_i
    //   will prevent them from escaping the I$.
    // data_o is the outgoing data, with data_v_o being valid
-   // fence_v_o is if a fence instruction has completed
    // spec_v_o is if there is a cache miss, but we have decided not to send it out
    //   because we need backend confirmation of its validity
    // yumi_i is required to dequeue any of these outputs
    , output logic [instr_width_gp-1:0]                data_o
    , output logic                                     data_v_o
-   , output logic                                     fence_v_o
    , output logic                                     spec_v_o
-   , input                                            scan_i
    , input                                            yumi_i
 
    // Cache Engine Interface
@@ -256,8 +251,8 @@ module bp_fe_icache
   // Accept requests when we're in ready state and there's no blocked request in TL
   // Also accept request when 'forced'
   assign safe_tl_we = is_ready & v_i & (~v_tl_r | safe_tv_we | force_i) & ~cache_req_lock_i;
-  assign tl_we = safe_tl_we | poison_tl_i;
-  assign v_tl_n = yumi_o & ~poison_tl_i;
+  assign tl_we = safe_tl_we;
+  assign v_tl_n = yumi_o;
   bsg_dff_reset_en
    #(.width_p(1))
    v_tl_reg
@@ -322,8 +317,10 @@ module bp_fe_icache
   logic                                  snoop_tv_r;
   logic [assoc_p-1:0][bank_width_lp-1:0] ld_data_tv_r;
 
+  wire inval_tv = decode_tv_r.inval_op & snoop_tv_r;
+
   // fence.i does not check tags
-  assign safe_tv_we = v_tl & (~v_tv_r || yumi_i);
+  assign safe_tv_we = v_tl & (~v_tv_r || yumi_i || inval_tv);
   assign tv_we = safe_tv_we | poison_tv_i;
   assign v_tv_n = v_tl & (ptag_v_i | decode_tl_r.inval_op) & ~poison_tv_i;
   bsg_dff_reset_en
@@ -372,12 +369,12 @@ module bp_fe_icache
                })
      );
 
-  wire [paddr_width_p-1:0] paddr_tv_n = critical_recv ? paddr_tv_r : scan_i ? (paddr_tv_r + 2'b10) : paddr_tl;
+  wire [paddr_width_p-1:0] paddr_tv_n = critical_recv ? paddr_tv_r : paddr_tl;
   bsg_dff_en
    #(.width_p(paddr_width_p))
    paddr_reg
     (.clk_i(clk_i)
-     ,.en_i(tv_we | critical_recv | scan_i)
+     ,.en_i(tv_we | critical_recv)
      ,.data_i(paddr_tv_n)
      ,.data_o(paddr_tv_r)
      );
@@ -435,13 +432,8 @@ module bp_fe_icache
      ,.sel_i(ld_data_word_sel_tv)
      ,.data_o(final_data_tv)
      );
-  wire upper_not_lower = paddr_tv_r[1];
-  wire [cinstr_width_gp-1:0] final_data_upper = final_data_tv[cinstr_width_gp+:cinstr_width_gp];
-  wire [cinstr_width_gp-1:0] final_data_lower = final_data_tv[0+:cinstr_width_gp];
 
-  assign data_o[0+:cinstr_width_gp] = upper_not_lower ? final_data_upper : final_data_lower;
-  assign data_o[cinstr_width_gp+:cinstr_width_gp] = final_data_upper;
-  assign fence_v_o = v_tv &  decode_tv_r.inval_op & snoop_tv_r;
+  assign data_o    = final_data_tv;
   assign data_v_o  = v_tv & ~decode_tv_r.inval_op &  hit_v_tv;
   assign spec_v_o  = v_tv & ~decode_tv_r.inval_op & ~hit_v_tv & spec_tv_r;
 
@@ -484,7 +476,7 @@ module bp_fe_icache
   `bp_cast_o(bp_fe_icache_req_metadata_s, cache_req_metadata);
 
   localparam block_req_size = bp_cache_req_size_e'(`BSG_SAFE_CLOG2(block_width_p/8));
-  localparam uncached_req_size = e_size_4B;
+  localparam uncached_req_size = `BSG_SAFE_CLOG2(fetch_bytes_gp);
 
   wire cached_req   = decode_tv_r.fetch_op & ~uncached_tv_r & ~snoop_tv_r & ~hit_v_tv;
   wire uncached_req = decode_tv_r.fetch_op &  uncached_tv_r & ~snoop_tv_r & ~hit_v_tv;
@@ -493,7 +485,7 @@ module bp_fe_icache
 
   assign cache_req_v_o = v_tv & ~spec_tv_r & |{uncached_req, cached_req, inval_req};
   assign cache_req_cast_o =
-   '{addr     : `bp_addr_align(paddr_tv_r, 4)
+   '{addr     : `bp_addr_align(paddr_tv_r, fetch_bytes_gp)
      ,size    : bp_cache_req_size_e'(cached_req ? block_req_size : uncached_req_size)
      ,msg_type: cached_req ? e_miss_load : uncached_req ? e_uc_load : e_cache_inval
      ,subop   : e_req_amoswap

@@ -27,11 +27,13 @@ module bp_fe_btb
    , output logic                     init_done_o
 
    // Synchronous read
-   , input [vaddr_width_p-1:0]        r_addr_i
-   , input                            r_v_i
-   , output logic [vaddr_width_p-1:0] br_tgt_o
-   , output logic                     br_tgt_v_o
-   , output logic                     br_tgt_jmp_o
+   , input [vaddr_width_p-1:0]          r_addr_i
+   , input                              r_v_i
+   , output logic [btb_tag_width_p-1:0] tag_o
+   , output logic [btb_idx_width_p-1:0] idx_o
+   , output logic [vaddr_width_p-1:0]   br_tgt_o
+   , output logic                       br_tgt_v_o
+   , output logic                       br_tgt_jmp_o
 
    // Synchronous write
    , input                            w_v_i
@@ -39,9 +41,18 @@ module bp_fe_btb
    , input                            w_jmp_i
    , input [btb_tag_width_p-1:0]      w_tag_i
    , input [btb_idx_width_p-1:0]      w_idx_i
-   , input [vaddr_width_p-1:0]        br_tgt_i
+   , input [vaddr_width_p-1:0]        w_tgt_i
+   , input                            w_force_i
    , output logic                     w_yumi_o
    );
+
+  typedef struct packed
+  {
+    logic                       v;
+    logic                       jmp;
+    logic [btb_tag_width_p-1:0] tag;
+    logic [vaddr_width_p-1:0]   tgt;
+  }  bp_btb_entry_s;
 
   ///////////////////////
   // Initialization state machine
@@ -81,61 +92,58 @@ module bp_fe_btb
     else
       state_r <= state_n;
 
-  typedef struct packed
-  {
-    logic                       v;
-    logic                       jmp;
-    logic [btb_tag_width_p-1:0] tag;
-    logic [vaddr_width_p-1:0]   tgt;
-  }  bp_btb_entry_s;
+  localparam hash_width_lp = fetch_sel_gp;
+  wire [hash_width_lp-1:0]  r_hash_li = r_addr_i[1+:fetch_sel_gp];
+  wire [btb_idx_width_p-1:0] r_idx_li = r_addr_i[1+fetch_sel_gp+:btb_idx_width_p];
+  wire [btb_tag_width_p-1:0] r_tag_li = r_addr_i[1+fetch_sel_gp+btb_idx_width_p+:btb_tag_width_p] ^ r_hash_li;
 
-  wire [btb_idx_width_p-1:0] r_idx_li = r_addr_i[2+:btb_idx_width_p] ^ r_addr_i[1];
-  wire [btb_tag_width_p-1:0] r_tag_li = r_addr_i[2+btb_idx_width_p+:btb_tag_width_p];
+  logic rw_same_addr;
+  wire suppress_read = rw_same_addr & w_force_i;
+  wire suppress_write = rw_same_addr & ~w_force_i;
 
-  bp_btb_entry_s tag_mem_data_li;
-  wire rw_same_addr = r_v_i & w_v_i & (r_idx_li == w_idx_i);
-  wire                          tag_mem_w_v_li = is_clear | (w_v_i & ~rw_same_addr);
-  wire [btb_idx_width_p-1:0] tag_mem_w_addr_li = is_clear ? init_cnt : w_idx_i;
+  bp_btb_entry_s data_li;
+  wire                          w_v_li = is_clear | (w_v_i & ~suppress_write);
+  wire [btb_idx_width_p-1:0] w_addr_li = is_clear ? init_cnt : w_idx_i;
   // Bug in XSIM 2019.2 causes SEGV when assigning to structs with a mux
   bp_btb_entry_s new_btb;
-  assign new_btb = '{v: 1'b1, jmp: w_jmp_i, tag: w_tag_i, tgt: br_tgt_i};
-  assign tag_mem_data_li = (is_clear | (w_v_i & w_clr_i)) ? '0 : new_btb;
+  assign new_btb = '{v: 1'b1, jmp: w_jmp_i, tag: w_tag_i, tgt: w_tgt_i};
+  assign data_li = (is_clear | (w_v_i & w_clr_i)) ? '0 : new_btb;
 
-  bp_btb_entry_s tag_mem_data_lo;
-  wire                           tag_mem_r_v_li = r_v_i;
-  wire [btb_idx_width_p-1:0]  tag_mem_r_addr_li = r_idx_li;
+  bp_btb_entry_s data_lo;
+  wire                           r_v_li = r_v_i & ~suppress_read;
+  wire [btb_idx_width_p-1:0]  r_addr_li = r_idx_li;
+
+  assign rw_same_addr = r_v_i & w_v_i & (r_idx_li == w_idx_i);
+
   bsg_mem_1r1w_sync
    #(.width_p($bits(bp_btb_entry_s)), .els_p(btb_els_lp), .latch_last_read_p(1))
    tag_mem
     (.clk_i(clk_i)
      ,.reset_i(reset_i)
 
-     ,.w_v_i(tag_mem_w_v_li)
-     ,.w_addr_i(tag_mem_w_addr_li)
-     ,.w_data_i(tag_mem_data_li)
+     ,.w_v_i(w_v_li)
+     ,.w_addr_i(w_addr_li)
+     ,.w_data_i(data_li)
 
-     ,.r_v_i(tag_mem_r_v_li)
-     ,.r_addr_i(tag_mem_r_addr_li)
-     ,.r_data_o(tag_mem_data_lo)
+     ,.r_v_i(r_v_li)
+     ,.r_addr_i(r_addr_li)
+     ,.r_data_o(data_lo)
      );
-  assign w_yumi_o = is_run & w_v_i & ~rw_same_addr;
+  assign w_yumi_o = is_run & w_v_li;
 
-  logic [btb_tag_width_p-1:0] r_tag_r;
-  bsg_dff_reset_en
-   #(.width_p(btb_tag_width_p))
-   tag_reg
+  logic suppress_read_r;
+  bsg_dff_en
+   #(.width_p(btb_tag_width_p+btb_idx_width_p+1))
+   addr_reg
     (.clk_i(clk_i)
-     ,.reset_i(reset_i)
-     ,.en_i(tag_mem_r_v_li)
-
-     ,.data_i(r_tag_li)
-     ,.data_o(r_tag_r)
+     ,.en_i(r_v_i)
+     ,.data_i({r_tag_li, r_idx_li, suppress_read})
+     ,.data_o({tag_o, idx_o, suppress_read_r})
      );
 
-  assign br_tgt_v_o   = tag_mem_data_lo.v & (tag_mem_data_lo.tag == r_tag_r);
-  assign br_tgt_jmp_o = tag_mem_data_lo.v & tag_mem_data_lo.jmp;
-  assign br_tgt_o     = tag_mem_data_lo.tgt;
-
+  assign br_tgt_v_o   = data_lo.v & (data_lo.tag == tag_o) & ~suppress_read_r;
+  assign br_tgt_jmp_o = data_lo.v & data_lo.jmp;
+  assign br_tgt_o     = data_lo.tgt;
 
 endmodule
 
