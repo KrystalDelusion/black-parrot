@@ -138,7 +138,7 @@ module bp_me_bedrock_register
    #(.in_width_p(dword_width_gp), .out_width_p(bedrock_fill_width_p))
    fwd_bus_pack
     (.data_i(rdata_lo)
-     ,.sel_i('0) // We are aligned
+     ,.sel_i(mem_rev_header_cast_o.addr[0+:sel_width_lp])
      ,.size_i(mem_rev_header_cast_o.size[0+:size_width_lp])
      ,.data_o(mem_rev_data_o)
      );

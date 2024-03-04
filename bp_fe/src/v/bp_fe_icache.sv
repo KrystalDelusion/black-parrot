@@ -150,9 +150,9 @@ module bp_fe_icache
 
   // State machine declaration
   enum logic [1:0] {e_ready, e_miss, e_recover} state_n, state_r;
-  wire is_ready    = (state_r == e_ready);
-  wire is_miss     = (state_r == e_miss);
-  wire is_recover  = (state_r == e_recover);
+  wire is_ready   = (state_r == e_ready);
+  wire is_miss    = (state_r == e_miss);
+  wire is_recover = (state_r == e_recover);
 
   // Feedback signals between stages
   logic safe_tl_we, tl_we, safe_tv_we, tv_we;
@@ -532,7 +532,7 @@ module bp_fe_icache
       e_ready   : state_n = cache_req_yumi_i ? e_miss : state_r;
       e_miss    : state_n = complete_recv ? e_recover : state_r;
       // e_recover:
-      default  : state_n = safe_tl_we ? e_recover : e_ready;
+      default  : state_n = e_ready;
     endcase
 
   // synopsys sync_set_reset "reset_i"
@@ -545,6 +545,7 @@ module bp_fe_icache
   /////////////////////////////////////////////////////////////////////////////
   // SRAM Control
   /////////////////////////////////////////////////////////////////////////////
+  wire do_recover = is_recover & !safe_tl_we;
 
   ///////////////////////////
   // Tag Mem Control
@@ -562,14 +563,14 @@ module bp_fe_icache
 
   // Tag mem is bypassed if the index is the same on consecutive reads
   wire tag_mem_bypass = (vaddr_index == vaddr_index_tl) & tag_mem_last_read_r;
-  wire tag_mem_fast_read = is_recover || safe_tl_we & ~tag_mem_bypass;
+  wire tag_mem_fast_read = do_recover || safe_tl_we & ~tag_mem_bypass;
   wire tag_mem_fast_write = 1'b0;
   wire tag_mem_slow_read = tag_mem_pkt_yumi_o & (tag_mem_pkt_cast_i.opcode == e_cache_tag_mem_read) ;
   wire tag_mem_slow_write = tag_mem_pkt_yumi_o & (tag_mem_pkt_cast_i.opcode != e_cache_tag_mem_read);
   assign tag_mem_v_li = tag_mem_fast_read | tag_mem_fast_write | tag_mem_slow_read | tag_mem_slow_write;
   assign tag_mem_w_li = tag_mem_fast_write | tag_mem_slow_write;
   assign tag_mem_addr_li = tag_mem_fast_read
-    ? is_recover ? vaddr_index_tl : vaddr_index
+    ? do_recover ? vaddr_index_tl : vaddr_index
     : tag_mem_pkt_cast_i.index;
   assign tag_mem_pkt_yumi_o = tag_mem_pkt_v_i & ~|tag_mem_fast_read;
 
@@ -676,13 +677,13 @@ module bp_fe_icache
       assign data_mem_slow_read[i] = data_mem_pkt_yumi_o & (data_mem_pkt_cast_i.opcode == e_cache_data_mem_read);
       assign data_mem_slow_write[i] = data_mem_pkt_yumi_o & (data_mem_pkt_cast_i.opcode == e_cache_data_mem_write) & data_mem_write_bank_mask[i];
 
-      assign data_mem_fast_read[i] = is_recover || safe_tl_we & decode_lo.fetch_op & (~data_mem_bypass | data_mem_bypass_select[i]);
+      assign data_mem_fast_read[i] = do_recover || safe_tl_we & decode_lo.fetch_op & (~data_mem_bypass | data_mem_bypass_select[i]);
 
       assign data_mem_v_li[i] = data_mem_fast_read[i] | data_mem_slow_read[i] | data_mem_slow_write[i];
       assign data_mem_w_li[i] = data_mem_slow_write[i];
       wire [bindex_width_lp-1:0] data_mem_pkt_offset = (bindex_width_lp'(i) - data_mem_pkt_cast_i.way_id);
       assign data_mem_addr_li[i] = data_mem_fast_read[i]
-        ? is_recover ? {vaddr_index_tl, {(assoc_p>1){vaddr_bank_tl}}} : {vaddr_index, {(assoc_p > 1){vaddr_bank}}}
+        ? do_recover ? {vaddr_index_tl, {(assoc_p>1){vaddr_bank_tl}}} : {vaddr_index, {(assoc_p > 1){vaddr_bank}}}
         : {data_mem_pkt_cast_i.index, {(assoc_p > 1){data_mem_pkt_offset}}};
       assign data_mem_data_li[i] = data_mem_pkt_data_li[i];
     end
