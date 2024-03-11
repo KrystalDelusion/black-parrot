@@ -31,7 +31,7 @@ module bp_fe_controller
    , output logic                                     redirect_v_o
    , output logic [vaddr_width_p-1:0]                 redirect_pc_o
    , output logic [vaddr_width_p-1:0]                 redirect_npc_o
-   , output logic [cinstr_width_gp-1:0]               redirect_instr_o
+   , output logic [fetch_width_gp-1:0]                redirect_instr_o
    , output logic [fetch_ptr_gp-1:0]                  redirect_count_o
    , output logic                                     redirect_br_v_o
    , output logic                                     redirect_br_taken_o
@@ -62,9 +62,8 @@ module bp_fe_controller
    , input                                            fetch_access_fault_i
    , input                                            fetch_spec_v_i
    , input [vaddr_width_p-1:0]                        fetch_pc_i
-   , input [instr_width_gp-1:0]                       fetch_instr_i
+   , input [fetch_width_gp-1:0]                       fetch_instr_i
    , input [branch_metadata_fwd_width_p-1:0]          fetch_br_metadata_fwd_i
-   , input [fetch_ptr_gp-1:0]                         fetch_partial_i
    , input [fetch_ptr_gp-1:0]                         fetch_count_i
    , output logic                                     fetch_ready_then_o
 
@@ -173,11 +172,10 @@ module bp_fe_controller
       ? fe_cmd_cast_i.operands.icache_fill_response.count
       : '0;
 
+  assign fetch_ready_then_o = is_run & ~cmd_immediate_v & ~cmd_complex_v & fe_queue_ready_and_i;
   wire fetch_exception_v = fetch_ready_then_o & ~fetch_instr_v_i
     & (fetch_itlb_miss_i | fetch_page_fault_i | fetch_access_fault_i | fetch_spec_v_i);
   assign fe_queue_v_o = fetch_instr_v_i | fetch_exception_v;
-
-  assign fetch_ready_then_o = is_run & ~cmd_immediate_v & ~cmd_complex_v & fe_queue_ready_and_i;
 
   always_comb
     begin
@@ -194,7 +192,7 @@ module bp_fe_controller
                                          : e_icache_miss;
       fe_queue_cast_o.instr = fetch_instr_i;
       fe_queue_cast_o.branch_metadata_fwd = fetch_br_metadata_fwd_i;
-      fe_queue_cast_o.count = fetch_instr_v_i ? fetch_count_i : fetch_partial_i;
+      fe_queue_cast_o.count = fetch_count_i;
     end
 
   always_comb

@@ -90,7 +90,7 @@ module bp_fe_icache
    // spec_v_o is if there is a cache miss, but we have decided not to send it out
    //   because we need backend confirmation of its validity
    // yumi_i is required to dequeue any of these outputs
-   , output logic [instr_width_gp-1:0]                data_o
+   , output logic [fetch_width_gp-1:0]                data_o
    , output logic                                     data_v_o
    , output logic                                     spec_v_o
    , input                                            yumi_i
@@ -134,8 +134,7 @@ module bp_fe_icache
   // Various localparameters
   localparam lg_assoc_lp            =`BSG_SAFE_CLOG2(assoc_p);
   localparam bank_width_lp          = block_width_p / assoc_p;
-  localparam num_instr_per_bank_lp  = bank_width_lp / instr_width_gp;
-  localparam num_cinstr_per_bank_lp = bank_width_lp / cinstr_width_gp;
+  localparam num_fetch_per_bank_lp  = bank_width_lp / fetch_width_gp;
   localparam data_mem_mask_width_lp = (bank_width_lp >> 3);
   localparam byte_offset_width_lp   = `BSG_SAFE_CLOG2(bank_width_lp >> 3);
   localparam bindex_width_lp        = `BSG_SAFE_CLOG2(assoc_p);
@@ -281,6 +280,7 @@ module bp_fe_icache
   wire [vtag_width_p-1:0]     vaddr_vtag_tl = vaddr_tl_r[(vaddr_width_p-1)-:vtag_width_p];
   wire [sindex_width_lp-1:0] vaddr_index_tl = vaddr_tl_r[block_offset_width_lp+:sindex_width_lp];
   wire [bindex_width_lp-1:0]  vaddr_bank_tl = vaddr_tl_r[byte_offset_width_lp+:bindex_width_lp];
+  wire [vaddr_width_p-1:0]         vaddr_tl = vaddr_tl_r;
 
   // Concatenate unused bits from vaddr if any cache way size is not 4kb
   localparam ctag_vbits_lp = page_offset_width_gp - (block_offset_width_lp + sindex_width_lp);
@@ -309,7 +309,6 @@ module bp_fe_icache
   /////////////////////////////////////////////////////////////////////////////
   // TV Stage
   /////////////////////////////////////////////////////////////////////////////
-  localparam snoop_offset_width_lp = `BSG_SAFE_CLOG2(fill_width_p/word_width_gp);
   logic [paddr_width_p-1:0]              paddr_tv_r;
   logic [assoc_p-1:0]                    bank_sel_one_hot_tv_r, way_v_tv_r, hit_v_tv_r;
   logic                                  spec_tv_r, uncached_tv_r;
@@ -421,15 +420,14 @@ module bp_fe_icache
      ,.data_o(ld_data_way_picked)
      );
 
-  // TODO: Can retime manually for critical path?
-  logic [instr_width_gp-1:0] final_data_tv;
-  wire [`BSG_SAFE_CLOG2(num_instr_per_bank_lp)-1:0] ld_data_word_sel_tv =
-    paddr_tv_r[2+:`BSG_SAFE_CLOG2(num_instr_per_bank_lp)];
+  logic [fetch_width_gp-1:0] final_data_tv;
+  wire [`BSG_SAFE_CLOG2(num_fetch_per_bank_lp)-1:0] ld_data_sel_tv =
+    paddr_tv_r[3+:`BSG_SAFE_CLOG2(num_fetch_per_bank_lp)];
   bsg_mux
-   #(.width_p(instr_width_gp), .els_p(num_instr_per_bank_lp))
-   word_select_mux
+   #(.width_p(fetch_width_gp), .els_p(num_fetch_per_bank_lp))
+   dword_select_mux
     (.data_i(ld_data_way_picked)
-     ,.sel_i(ld_data_word_sel_tv)
+     ,.sel_i(ld_data_sel_tv)
      ,.data_o(final_data_tv)
      );
 
@@ -481,7 +479,6 @@ module bp_fe_icache
   wire cached_req   = decode_tv_r.fetch_op & ~uncached_tv_r & ~snoop_tv_r & ~hit_v_tv;
   wire uncached_req = decode_tv_r.fetch_op &  uncached_tv_r & ~snoop_tv_r & ~hit_v_tv;
   wire inval_req    = decode_tv_r.inval_op & ~snoop_tv_r;
-
 
   assign cache_req_v_o = v_tv & ~spec_tv_r & |{uncached_req, cached_req, inval_req};
   assign cache_req_cast_o =

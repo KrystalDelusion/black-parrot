@@ -23,10 +23,10 @@ module bp_fe_top
 
    , input [fe_cmd_width_lp-1:0]                      fe_cmd_i
    , input                                            fe_cmd_v_i
-   , output logic                                     fe_cmd_yumi_o
+   , output                                           fe_cmd_yumi_o
 
-   , output logic [fe_queue_width_lp-1:0]             fe_queue_o
-   , output logic                                     fe_queue_v_o
+   , output [fe_queue_width_lp-1:0]                   fe_queue_o
+   , output                                           fe_queue_v_o
    , input                                            fe_queue_ready_and_i
 
    , output logic [icache_req_width_lp-1:0]           cache_req_o
@@ -96,20 +96,18 @@ module bp_fe_top
   logic [fetch_ptr_gp-1:0] redirect_count_li;
   logic [vaddr_width_p-1:0] redirect_npc_li, redirect_pc_li;
   logic redirect_br_v_li, redirect_br_taken_li, redirect_br_ntaken_li, redirect_br_nonbr_li;
-  logic [cinstr_width_gp-1:0] redirect_instr_li;
+  logic [fetch_width_gp-1:0] redirect_instr_li;
   bp_fe_branch_metadata_fwd_s redirect_br_metadata_fwd_li;
   logic [vaddr_width_p-1:0] next_pc_lo;
   logic if1_we;
-  logic ovr_lo, if2_we;
   logic [vaddr_width_p-1:0] if2_pc_lo;
   bp_fe_branch_metadata_fwd_s fetch_br_metadata_fwd_lo;
-  logic fetch_taken_lo;
-  logic fetch_ready_then_li, fetch_instr_v_lo;
+  logic ovr_lo, if2_we;
+  logic fetch_ready_then_li, fetch_instr_v_lo, fetch_exception_v_lo, fetch_taken_lo;
   logic [vaddr_width_p-1:0] fetch_pc_lo;
-  logic [instr_width_gp-1:0] fetch_instr_lo;
-  bp_fe_instr_scan_s fetch_instr_scan_lo;
-  logic fetch_catchup_lo, fetch_linear_lo, fetch_rebase_lo;
-  logic [fetch_ptr_gp-1:0] fetch_partial_lo, fetch_count_lo;
+  logic [fetch_cinstr_gp-1:0][cinstr_width_gp-1:0] fetch_instr_lo;
+  bp_fe_scan_s fetch_scan_lo;
+  logic [fetch_ptr_gp-1:0] fetch_count_lo;
   bp_fe_pc_gen
    #(.bp_params_p(bp_params_p))
    pc_gen
@@ -117,11 +115,12 @@ module bp_fe_top
      ,.reset_i(reset_i)
 
      ,.init_done_o(pc_gen_init_done_lo)
+
+     ,.attaboy_v_i(attaboy_v_li)
      ,.attaboy_pc_i(attaboy_pc_li)
      ,.attaboy_br_metadata_fwd_i(attaboy_br_metadata_fwd_li)
      ,.attaboy_taken_i(attaboy_taken_li)
      ,.attaboy_ntaken_i(attaboy_ntaken_li)
-     ,.attaboy_v_i(attaboy_v_li)
      ,.attaboy_force_i(attaboy_force_li)
      ,.attaboy_yumi_o(attaboy_yumi_lo)
 
@@ -145,11 +144,7 @@ module bp_fe_top
 
      ,.fetch_instr_v_i(fetch_instr_v_lo)
      ,.fetch_pc_i(fetch_pc_lo)
-     ,.fetch_instr_i(fetch_instr_lo)
-     ,.fetch_instr_scan_i(fetch_instr_scan_lo)
-     ,.fetch_catchup_i(fetch_catchup_lo)
-     ,.fetch_linear_i(fetch_linear_lo)
-     ,.fetch_rebase_i(fetch_rebase_lo)
+     ,.fetch_scan_i(fetch_scan_lo)
      ,.fetch_br_metadata_fwd_o(fetch_br_metadata_fwd_lo)
      ,.fetch_taken_o(fetch_taken_lo)
      );
@@ -225,11 +220,12 @@ module bp_fe_top
 
   `declare_bp_fe_icache_pkt_s(vaddr_width_p);
   bp_fe_icache_pkt_s icache_pkt_li;
-  logic [instr_width_gp-1:0] icache_data_lo;
+  logic [fetch_width_gp-1:0] icache_data_lo;
+  logic [vaddr_width_p-1:0] icache_vaddr_lo;
   logic icache_v_li, icache_force_li, icache_yumi_lo;
   logic icache_tv_we;
   logic icache_data_v_lo, icache_spec_v_lo, icache_yumi_li;
-  logic poison_tv_lo;
+  logic poison_tv_lo, poison_isd_lo;
   bp_fe_icache
    #(.bp_params_p(bp_params_p))
    icache
@@ -284,40 +280,70 @@ module bp_fe_top
      ,.stat_mem_o(stat_mem_o)
      );
 
+  logic assembled_v_lo;
+  logic [vaddr_width_p-1:0] assembled_pc_lo;
+  logic [fetch_width_gp-1:0] assembled_instr_lo;
+  logic [fetch_ptr_gp-1:0] assembled_count_lo, assembled_partial_lo;
+  logic [fetch_ptr_gp-1:0] assembled_yumi_li;
   bp_fe_realigner
    #(.bp_params_p(bp_params_p))
    realigner
     (.clk_i(clk_i)
      ,.reset_i(reset_i)
 
-     ,.if2_instr_v_i(icache_data_v_lo)
      ,.if2_pc_i(if2_pc_lo)
-     ,.if2_data_i(icache_data_lo)
-     ,.if2_yumi_o(icache_yumi_li)
+     ,.icache_data_v_i(icache_data_v_lo)
+     ,.icache_data_i(icache_data_lo)
+     ,.icache_yumi_o(icache_yumi_li)
 
      ,.redirect_v_i(redirect_v_li)
-     ,.redirect_count_i(redirect_count_li)
      ,.redirect_pc_i(redirect_pc_li)
      ,.redirect_instr_i(redirect_instr_li)
+     ,.redirect_count_i(redirect_count_li)
 
-     ,.fetch_instr_v_o(fetch_instr_v_lo)
-     ,.fetch_pc_o(fetch_pc_lo)
-     ,.fetch_instr_o(fetch_instr_lo)
-     ,.fetch_count_o(fetch_count_lo)
-     ,.fetch_partial_o(fetch_partial_lo)
-     ,.fetch_catchup_o(fetch_catchup_lo)
-     ,.fetch_linear_o(fetch_linear_lo)
-     ,.fetch_rebase_o(fetch_rebase_lo)
-     ,.fetch_taken_i(fetch_taken_lo)
-     ,.fetch_ready_then_i(fetch_ready_then_li)
+     ,.assembled_v_o(assembled_v_lo)
+     ,.assembled_pc_o(assembled_pc_lo)
+     ,.assembled_instr_o(assembled_instr_lo)
+     ,.assembled_count_o(assembled_count_lo)
+     ,.assembled_partial_o(assembled_partial_lo)
+     ,.assembled_yumi_i(assembled_yumi_li)
      );
 
-  bp_fe_instr_scan
+  bp_fe_scan
    #(.bp_params_p(bp_params_p))
-   instr_scan
-    (.instr_i(fetch_instr_lo)
-     ,.scan_o(fetch_instr_scan_lo)
+   scan
+    (.v_i(assembled_v_lo)
+     ,.pc_i(assembled_pc_lo)
+     ,.instr_i(assembled_instr_lo)
+     ,.count_i(assembled_count_lo)
+     ,.partial_i(assembled_partial_lo)
+     ,.yumi_o(assembled_yumi_li)
+
+     ,.instr_v_o(fetch_instr_v_lo)
+     ,.pc_o(fetch_pc_lo)
+     ,.instr_o(fetch_instr_lo)
+     ,.scan_o(fetch_scan_lo)
+     ,.count_o(fetch_count_lo)
+     ,.taken_i(fetch_taken_lo)
+     ,.ready_then_i(fetch_ready_then_li)
      );
+
+  //always_ff @(negedge clk_i)
+  //  if (fe_queue_ready_and_i & fe_queue_v_o && fe_queue_cast_o.msg_type == e_instr_fetch) begin
+  //    $display("[%t] FETCH PC: %x INSTR: %x COUNT: %x", $time, fe_queue_cast_o.pc, fe_queue_cast_o.instr, fe_queue_cast_o.count);
+  //  end
+
+  //always_ff @(negedge clk_i)
+  //  if (fe_cmd_yumi_o && redirect_v_li && redirect_br_v_li && redirect_br_metadata_fwd_li.site_return)
+  //    $display("RETURN MISS->PC: %x", redirect_npc_li);
+
+  //always_ff @(negedge clk_i)
+  //  if (fe_cmd_yumi_o && redirect_v_li && redirect_br_v_li)
+  //    $display("REDIRECT PC: %x", redirect_npc_li);
+
+  //always_ff @(negedge clk_i)
+  //  if (fetch_instr_v_lo & fetch_scan_lo.rebase)
+  //    $display("REBASE: %x->%x", fetch_pc_lo, next_pc_lo);
 
   // This tracks the I$ valid. Could move inside entirely, but we're trying to separate
   //   those responsibilities
@@ -384,7 +410,6 @@ module bp_fe_top
      ,.fetch_pc_i(fetch_pc_lo)
      ,.fetch_instr_i(fetch_instr_lo)
      ,.fetch_count_i(fetch_count_lo)
-     ,.fetch_partial_i(fetch_partial_lo)
      ,.fetch_br_metadata_fwd_i(fetch_br_metadata_fwd_lo)
      ,.fetch_ready_then_o(fetch_ready_then_li)
 
@@ -400,7 +425,6 @@ module bp_fe_top
 
      ,.shadow_priv_o(shadow_priv_n)
      ,.shadow_priv_w_o(shadow_priv_w)
-
      ,.shadow_translation_en_o(shadow_translation_en_n)
      ,.shadow_translation_en_w_o(shadow_translation_en_w)
      );

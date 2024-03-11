@@ -463,7 +463,6 @@ module testbench
 
           ,.br_ovr_i(fe.pc_gen.ovr_btaken | fe.pc_gen.ovr_jmp)
           ,.ret_ovr_i(fe.pc_gen.ovr_ret)
-          ,.realigner_i(fe.icache_data_v_lo & ~fe.fetch_instr_v_lo)
 
           ,.icache_data_v_i(fe.icache.data_v_o)
           ,.icache_v_i(fe.icache.v_i)
@@ -519,38 +518,38 @@ module testbench
           ,.commit_pkt_i(be.calculator.pipe_sys.commit_pkt_cast_o)
           );
 
-      bind bp_fe_top
-        bp_fe_nonsynth_pc_gen_tracer
-         #(.bp_params_p(bp_params_p))
-         pc_gen_tracer
-          (.clk_i(clk_i & testbench.pc_gen_trace_en_lo)
-           ,.reset_i(reset_i)
-           ,.freeze_i(cfg_bus_cast_i.freeze)
+      //bind bp_fe_top
+      //  bp_fe_nonsynth_pc_gen_tracer
+      //   #(.bp_params_p(bp_params_p))
+      //   pc_gen_tracer
+      //    (.clk_i(clk_i & testbench.pc_gen_trace_en_lo)
+      //     ,.reset_i(reset_i)
+      //     ,.freeze_i(cfg_bus_cast_i.freeze)
 
-           ,.mhartid_i(cfg_bus_cast_i.core_id)
+      //     ,.mhartid_i(cfg_bus_cast_i.core_id)
 
-           ,.state_resume_i(controller.is_resume)
-           ,.state_wait_i(controller.is_wait)
+      //     ,.state_resume_i(controller.is_resume)
+      //     ,.state_wait_i(controller.is_wait)
 
-           ,.icache_spec_i(icache_spec_v_lo)
-           ,.access_fault_i(instr_access_fault_r)
-           ,.page_fault_i(instr_page_fault_r)
-           ,.itlb_miss_i(itlb_miss_r)
+      //     ,.icache_spec_i(icache_spec_v_lo)
+      //     ,.access_fault_i(instr_access_fault_r)
+      //     ,.page_fault_i(instr_page_fault_r)
+      //     ,.itlb_miss_i(itlb_miss_r)
 
-           ,.src_redirect_i(pc_gen.redirect_v_i)
-           ,.src_override_ntaken_i(pc_gen.ovr_linear)
-           ,.src_override_ras_i(pc_gen.ovr_ret)
-           ,.src_override_branch_i(pc_gen.ovr_btaken | pc_gen.ovr_jmp)
-           ,.src_btb_taken_branch_i(pc_gen.btb_taken)
+      //     ,.src_redirect_i(pc_gen.redirect_v_i)
+      //     ,.src_override_ntaken_i(pc_gen.ovr_ntaken)
+      //     ,.src_override_ras_i(pc_gen.ovr_ret)
+      //     ,.src_override_branch_i(pc_gen.ovr_btaken | pc_gen.ovr_jmp)
+      //     ,.src_btb_taken_branch_i(pc_gen.btb_taken)
 
-           ,.if2_pc_i(pc_gen.pc_if2_r)
-           ,.if2_v_i(icache_data_v_lo)
+      //     ,.if2_pc_i(pc_gen.pc_if2_r)
+      //     ,.if2_v_i(if2_instr_v)
 
-           ,.fetch_v_i(fe_queue_ready_and_i & fe_queue_v_o)
-           ,.fetch_pc_i(fetch_pc_lo)
-           ,.fetch_instr_i(fetch_instr_lo)
-           ,.fetch_partial_i(1'b0)
-           );
+      //     ,.fetch_v_i(fe_queue_ready_and_i & fe_queue_v_o)
+      //     ,.fetch_pc_i(fetch_pc_lo)
+      //     ,.fetch_instr_i(fetch_instr_lo)
+      //     ,.fetch_partial_i(1'b0)
+      //     );
 
       bind bp_be_top
         bp_nonsynth_pc_profiler

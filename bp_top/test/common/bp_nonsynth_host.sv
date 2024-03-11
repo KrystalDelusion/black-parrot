@@ -124,8 +124,8 @@ module bp_nonsynth_host
   always_ff @(negedge clk_i)
     begin
       if (putchar_w_v_li) begin
-        $write("%c", data_lo[0+:8]);
-        $fwrite(stdout_global, "%c", data_lo[0+:8]);
+        //$write("%c", data_lo[0+:8]);
+        //$fwrite(stdout_global, "%c", data_lo[0+:8]);
       end
 
       if (putch_core_w_v_li) begin
@@ -195,19 +195,6 @@ module bp_nonsynth_host
     ,bootrom_mem[8*bootrom_addr_li+0]
     };
 
-  // Convert to little endian
-  wire [dword_width_gp-1:0] bootrom_data_reverse = {<<8{bootrom_data_lo}};
-
-  logic [dword_width_gp-1:0] bootrom_final_lo;
-  bsg_bus_pack
-   #(.in_width_p(dword_width_gp))
-   bootrom_pack
-    (.data_i(bootrom_data_lo)
-     ,.size_i(size_lo)
-     ,.sel_i(addr_lo[0+:3])
-     ,.data_o(bootrom_final_lo)
-     );
-
   localparam param_els_lp = `BSG_CDIV($bits(proc_param_lp),word_width_gp);
   localparam lg_param_els_lp = `BSG_SAFE_CLOG2(param_els_lp);
   logic [lg_param_els_lp-1:0] paramrom_addr_li;
@@ -224,7 +211,6 @@ module bp_nonsynth_host
     (.addr_i(paramrom_addr_li)
      ,.data_o(paramrom_data_lo)
      );
-  wire [bedrock_block_width_p-1:0] paramrom_final_lo = {bedrock_block_width_p/word_width_gp{paramrom_data_lo}};
 
   // TODO: Add dynamic enable
   assign icache_trace_en_o   = icache_trace_p;
@@ -245,8 +231,8 @@ module bp_nonsynth_host
   assign data_li[1] = '0;
   assign data_li[2] = ch;
   assign data_li[3] = finish_r;
-  assign data_li[4] = bootrom_final_lo;
-  assign data_li[5] = paramrom_final_lo;
+  assign data_li[4] = bootrom_data_lo;
+  assign data_li[5] = paramrom_data_lo;
 
 endmodule
 

@@ -112,5 +112,20 @@ module bp_fe_ras
   // "Improving Prediction for Procedure Returns with Return-Address-Stack Repair Mechanisms"
   assign v_o = 1'b1;
 
+  //always_ff @(posedge clk_i) begin
+  //  if (call_i) begin
+  //    $write("[%t] C: %x ", $time, addr_i);
+  //  end
+  //  if (return_i) begin
+  //    $write("[%t] R: %x ", $time, tgt_o);
+  //  end
+  //  if (restore_i) begin
+  //    $write("RESTORE");
+  //  end
+
+  //  if (call_i || return_i || restore_i) $write("\n");
+  //  //if (call_i || return_i) $write("\n");
+  //end
+
 endmodule
 

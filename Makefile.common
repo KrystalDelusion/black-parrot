@@ -24,6 +24,6 @@ export BP_TOOLS_DIR ?= $(TOP)/../black-parrot-tools
 include $(BP_TOOLS_DIR)/Makefile.common
 
 #export BP_SDK_DIR ?= $(TOP)/../black-parrot-sdk
-export BP_SDK_DIR ?= $(SCRATCH)/uncompressed-sdk
+export BP_SDK_DIR ?= $(TOP)/../uncompressed-sdk
 include $(BP_SDK_DIR)/Makefile.common
 

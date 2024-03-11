@@ -31,7 +31,7 @@ module bp_fe_nonsynth_icache_tracer
    , input                                                force_i
    , input                                                yumi_o
 
-   , input [instr_width_gp-1:0]                           data_o
+   , input [fetch_width_gp-1:0]                           data_o
    , input                                                data_v_o
    , input                                                spec_v_o
 

@@ -4,7 +4,6 @@
     logic icache_miss;
     logic branch_override;
     logic ret_override;
-    logic realigner;
     logic fe_cmd;
     logic mispredict;
     logic control_haz;
@@ -33,10 +32,9 @@
 
   typedef enum logic [4:0]
   {
-    icache_miss          = 5'd27
-    ,branch_override     = 5'd26
-    ,ret_override        = 5'd25
-    ,realigner           = 5'd24
+    icache_miss          = 5'd26
+    ,branch_override     = 5'd25
+    ,ret_override        = 5'd24
     ,fe_cmd              = 5'd23
     ,mispredict          = 5'd22
     ,control_haz         = 5'd21
@@ -92,7 +90,6 @@ module bp_nonsynth_core_profiler
 
     , input br_ovr_i
     , input ret_ovr_i
-    , input realigner_i
     , input icache_data_v_i
     , input icache_v_i
     , input icache_yumi_i
@@ -182,7 +179,6 @@ module bp_nonsynth_core_profiler
       stall_stage_n[2].fe_cmd            |= fe_cmd_nonattaboy_i;
       stall_stage_n[2].icache_miss       |= ~icache_data_v_i;
       stall_stage_n[2].mispredict        |= mispredict_i;
-      stall_stage_n[2].realigner         |= realigner_i;
 
       // ISD
       // Dispatch stalls
