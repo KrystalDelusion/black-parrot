@@ -253,7 +253,6 @@ module bp_fe_top
      ,.data_o(icache_data_lo)
      ,.data_v_o(icache_data_v_lo)
      ,.spec_v_o(icache_spec_v_lo)
-     ,.scan_i(fetch_scan_lo)
      ,.yumi_i(icache_yumi_li)
 
      ,.cache_req_o(cache_req_o)

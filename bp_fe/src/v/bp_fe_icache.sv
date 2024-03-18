@@ -95,7 +95,6 @@ module bp_fe_icache
    , output logic [instr_width_gp-1:0]                data_o
    , output logic                                     data_v_o
    , output logic                                     spec_v_o
-   , input                                            scan_i
    , input                                            yumi_i
 
    // Cache Engine Interface
@@ -372,12 +371,12 @@ module bp_fe_icache
                })
      );
 
-  wire [paddr_width_p-1:0] paddr_tv_n = critical_recv ? paddr_tv_r : scan_i ? (paddr_tv_r + 2'b10) : paddr_tl;
+  wire [paddr_width_p-1:0] paddr_tv_n = critical_recv ? paddr_tv_r : paddr_tl;
   bsg_dff_en
    #(.width_p(paddr_width_p))
    paddr_reg
     (.clk_i(clk_i)
-     ,.en_i(tv_we | critical_recv | scan_i)
+     ,.en_i(tv_we | critical_recv)
      ,.data_i(paddr_tv_n)
      ,.data_o(paddr_tv_r)
      );
@@ -435,12 +434,8 @@ module bp_fe_icache
      ,.sel_i(ld_data_word_sel_tv)
      ,.data_o(final_data_tv)
      );
-  wire upper_not_lower = paddr_tv_r[1];
-  wire [cinstr_width_gp-1:0] final_data_upper = final_data_tv[cinstr_width_gp+:cinstr_width_gp];
-  wire [cinstr_width_gp-1:0] final_data_lower = final_data_tv[0+:cinstr_width_gp];
 
-  assign data_o[0+:cinstr_width_gp] = upper_not_lower ? final_data_upper : final_data_lower;
-  assign data_o[cinstr_width_gp+:cinstr_width_gp] = final_data_upper;
+  assign data_o = final_data_tv;
   assign data_v_o  = v_tv & ~decode_tv_r.inval_op &  hit_v_tv;
   assign spec_v_o  = v_tv & ~decode_tv_r.inval_op & ~hit_v_tv & spec_tv_r;
 
