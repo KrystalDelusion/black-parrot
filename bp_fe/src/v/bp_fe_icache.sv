@@ -89,13 +89,11 @@ module bp_fe_icache
    // Cache engine requests cannot be cancelled once they come here, but poison_tv_i
    //   will prevent them from escaping the I$.
    // data_o is the outgoing data, with data_v_o being valid
-   // fence_v_o is if a fence instruction has completed
    // spec_v_o is if there is a cache miss, but we have decided not to send it out
    //   because we need backend confirmation of its validity
    // yumi_i is required to dequeue any of these outputs
    , output logic [instr_width_gp-1:0]                data_o
    , output logic                                     data_v_o
-   , output logic                                     fence_v_o
    , output logic                                     spec_v_o
    , input                                            scan_i
    , input                                            yumi_i
@@ -322,8 +320,10 @@ module bp_fe_icache
   logic                                  snoop_tv_r;
   logic [assoc_p-1:0][bank_width_lp-1:0] ld_data_tv_r;
 
+  wire inval_tv = v_tv_r & decode_tv_r.inval_op & snoop_tv_r;
+
   // fence.i does not check tags
-  assign safe_tv_we = v_tl & (~v_tv_r || yumi_i);
+  assign safe_tv_we = v_tl & (~v_tv_r || inval_tv || yumi_i);
   assign tv_we = safe_tv_we | poison_tv_i;
   assign v_tv_n = v_tl & (ptag_v_i | decode_tl_r.inval_op) & ~poison_tv_i;
   bsg_dff_reset_en
@@ -441,7 +441,6 @@ module bp_fe_icache
 
   assign data_o[0+:cinstr_width_gp] = upper_not_lower ? final_data_upper : final_data_lower;
   assign data_o[cinstr_width_gp+:cinstr_width_gp] = final_data_upper;
-  assign fence_v_o = v_tv &  decode_tv_r.inval_op & snoop_tv_r;
   assign data_v_o  = v_tv & ~decode_tv_r.inval_op &  hit_v_tv;
   assign spec_v_o  = v_tv & ~decode_tv_r.inval_op & ~hit_v_tv & spec_tv_r;
 
