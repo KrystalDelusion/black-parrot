@@ -51,21 +51,18 @@ module bp_fe_controller
    , input [vaddr_width_p-1:0]                        next_pc_i
 
    , input                                            ovr_i
-   , output logic                                     poison_if1_o
+   , output logic                                     poison_tl_o
    , output logic                                     if1_we_o
 
    , input                                            icache_tv_we_i
-   , output logic                                     poison_if2_o
+   , output logic                                     poison_tv_o
    , output logic                                     if2_we_o
 
-   , input                                            if2_instr_v_i
-   , input                                            if2_exception_v_i
-   , input                                            if2_itlb_miss_i
-   , input                                            if2_instr_page_fault_i
-   , input                                            if2_instr_access_fault_i
-   , input                                            if2_icache_spec_v_i
-   , input [branch_metadata_fwd_width_p-1:0]          if2_br_metadata_fwd_i
-   , output logic                                     poison_isd_o
+   , input                                            fetch_itlb_miss_i
+   , input                                            fetch_instr_page_fault_i
+   , input                                            fetch_instr_access_fault_i
+   , input                                            fetch_icache_spec_v_i
+   , input [branch_metadata_fwd_width_p-1:0]          fetch_br_metadata_fwd_i
 
    , input                                            fetch_instr_v_i
    , input                                            fetch_exception_v_i
@@ -73,6 +70,7 @@ module bp_fe_controller
    , input [instr_width_gp-1:0]                       fetch_instr_i
    , input                                            fetch_partial_i
    , input                                            fetch_eager_i
+   , output logic                                     fetch_ready_then_o
 
    , output logic                                     itlb_r_v_o
    , output logic                                     itlb_w_v_o
@@ -141,10 +139,10 @@ module bp_fe_controller
   wire cmd_immediate_v  = fe_cmd_v_i & (pc_redirect_v | icache_fill_response_v | wait_v | icache_fence_v);
   wire cmd_complex_v    = fe_cmd_v_i & ~cmd_immediate_v & cmd_nonattaboy_v;
 
-  assign redirect_v_o               = cmd_nonattaboy_v;
+  assign redirect_v_o               = if1_we_o & cmd_nonattaboy_v;
   assign redirect_pc_o              = fe_cmd_cast_i.npc - (redirect_resume_o ? 2'b10 : 2'b00);
   assign redirect_npc_o             = fe_cmd_cast_i.npc;
-  assign redirect_br_v_o            = br_miss_v;
+  assign redirect_br_v_o            = if1_we_o & br_miss_v;
   assign redirect_br_taken_o        = br_miss_taken;
   assign redirect_br_ntaken_o       = br_miss_ntaken;
   assign redirect_br_nonbr_o        = br_miss_nonbr;
@@ -157,7 +155,7 @@ module bp_fe_controller
   assign attaboy_ntaken_o          = attaboy_v & ~fe_cmd_cast_i.operands.attaboy.taken;
   assign attaboy_br_metadata_fwd_o = fe_cmd_cast_i.operands.attaboy.branch_metadata_fwd;
 
-  assign fe_cmd_yumi_o = (redirect_v_o & if1_we_o) || attaboy_yumi_i || (is_reset && cmd_nonreset_v);
+  assign fe_cmd_yumi_o = redirect_v_o || attaboy_yumi_i || (is_reset && cmd_nonreset_v);
 
   assign shadow_priv_w_o = state_reset_v | trap_v | interrupt_v | eret_v;
   assign shadow_priv_o = fe_cmd_cast_i.operands.pc_redirect_operands.priv;
@@ -173,47 +171,50 @@ module bp_fe_controller
       ,op  : icache_fence_v ? e_icache_inval : e_icache_fetch
       ,spec: !icache_fill_response_v && !icache_fence_v
       };
-  assign icache_force_o = cmd_nonattaboy_v | ovr_i;
-  assign poison_if1_o = if2_exception_v_i;
-  assign poison_if2_o = if2_exception_v_i
-    | ovr_i
-    | cmd_immediate_v
-    | (~is_resume & cmd_complex_v);
-  assign poison_isd_o = cmd_immediate_v | (~is_resume & cmd_complex_v);
 
   assign redirect_resume_o = itlb_fill_resume_v | icache_fill_resume_v;
-  assign redirect_instr_o = itlb_fill_response_v ? fe_cmd_cast_i.operands.itlb_fill_response.instr : fe_cmd_cast_i.operands.icache_fill_response.instr;
+  assign redirect_instr_o = itlb_fill_response_v
+    ? fe_cmd_cast_i.operands.itlb_fill_response.instr
+    : fe_cmd_cast_i.operands.icache_fill_response.instr;
 
-  assign fe_queue_v_o = fetch_instr_v_i | fetch_exception_v_i;
-
+  assign fetch_ready_then_o = is_run & fe_queue_ready_and_i & ~cmd_nonattaboy_v;
   always_comb
     begin
+      fe_queue_v_o = fetch_instr_v_i | fetch_exception_v_i;
+
       fe_queue_cast_o = '0;
       fe_queue_cast_o.pc = fetch_pc_i;
       fe_queue_cast_o.msg_type = fetch_instr_v_i
                                  ? e_instr_fetch
-                                 : if2_itlb_miss_i
+                                 : fetch_itlb_miss_i
                                    ? e_itlb_miss
-                                   : if2_instr_page_fault_i
+                                   : fetch_instr_page_fault_i
                                      ? e_instr_page_fault
-                                     : if2_instr_access_fault_i
+                                     : fetch_instr_access_fault_i
                                        ? e_instr_access_fault
                                        : e_icache_miss;
       fe_queue_cast_o.instr = fetch_instr_i;
-      fe_queue_cast_o.branch_metadata_fwd = if2_br_metadata_fwd_i;
+      fe_queue_cast_o.branch_metadata_fwd = fetch_br_metadata_fwd_i;
       fe_queue_cast_o.partial = fetch_instr_v_i ? fetch_eager_i : fetch_partial_i;
     end
 
   always_comb
     begin
-      state_n = state_r;
-      if1_we_o = 1'b0;
-      if2_we_o = icache_tv_we_i;
       icache_v_o = 1'b0;
+      icache_force_o = 1'b0;
       itlb_r_v_o = 1'b0;
+
+      if1_we_o = 1'b0;
+      if2_we_o = 1'b0;
+
+      poison_tl_o = 1'b0;
+      poison_tv_o = 1'b0;
+
       itlb_w_v_o = 1'b0;
-      itlb_flush_v_o = 1'b0;
       itlb_fence_v_o = 1'b0;
+      itlb_flush_v_o = 1'b0;
+
+      state_n = state_r;
 
       case (state_r)
         e_reset:
@@ -222,19 +223,27 @@ module bp_fe_controller
           end
         e_wait, e_run:
           begin
-            icache_v_o = (is_run & ~cmd_complex_v) || (is_wait && cmd_immediate_v);
-            if1_we_o = icache_yumi_i & ~cmd_complex_v;
-            itlb_r_v_o = icache_yumi_i;
+            icache_v_o = ovr_i || cmd_immediate_v || (is_run && !cmd_complex_v);
+            icache_force_o = ovr_i || cmd_immediate_v;
+            itlb_r_v_o = icache_yumi_i & ~cmd_complex_v;
+
             itlb_w_v_o = itlb_fill_response_v;
             itlb_fence_v_o = itlb_fence_v;
             itlb_flush_v_o = cmd_nonattaboy_v;
-            state_n = (wait_v | icache_fence_v)
+
+            if1_we_o = icache_yumi_i & ~cmd_complex_v;
+            if2_we_o = icache_tv_we_i;
+
+            poison_tl_o = ~icache_force_o & fetch_exception_v_i;
+            poison_tv_o =  icache_force_o | cmd_complex_v | fetch_exception_v_i;
+
+            state_n = (wait_v || icache_fence_v)
                       ? e_wait
                       : cmd_complex_v
                         ? e_resume
                         : cmd_immediate_v
                           ? e_run
-                          : if2_exception_v_i
+                          : fetch_exception_v_i
                             ? e_wait
                             : if1_we_o
                               ? e_run
@@ -256,9 +265,7 @@ module bp_fe_controller
     if (reset_i)
         state_r <= e_reset;
     else
-      begin
         state_r <= state_n;
-      end
 
 endmodule
 

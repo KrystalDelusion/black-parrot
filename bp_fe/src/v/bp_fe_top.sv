@@ -227,7 +227,7 @@ module bp_fe_top
   logic icache_v_li, icache_force_li, icache_yumi_lo;
   logic icache_tv_we;
   logic icache_data_v_lo, icache_spec_v_lo, icache_yumi_li;
-  logic poison_if1_lo, poison_if2_lo, poison_isd_lo;
+  logic poison_tl_lo, poison_tv_lo;
   bp_fe_icache
    #(.bp_params_p(bp_params_p))
    icache
@@ -239,15 +239,15 @@ module bp_fe_top
      ,.icache_pkt_i(icache_pkt_li)
      ,.v_i(icache_v_li)
      ,.force_i(icache_force_li)
+     ,.poison_tl_i(poison_tl_lo)
      ,.yumi_o(icache_yumi_lo)
-     ,.poison_tl_i(poison_if1_lo)
 
      ,.ptag_i(ptag_li)
      ,.ptag_v_i(ptag_v_li)
      ,.ptag_uncached_i(ptag_uncached_li)
      ,.ptag_nonidem_i(ptag_nonidem_li)
      ,.ptag_dram_i(ptag_dram_li)
-     ,.poison_tv_i(poison_if2_lo)
+     ,.poison_tv_i(poison_tv_lo)
      ,.tv_we_o(icache_tv_we)
 
      ,.data_o(icache_data_lo)
@@ -282,8 +282,6 @@ module bp_fe_top
      ,.stat_mem_pkt_yumi_o(stat_mem_pkt_yumi_o)
      ,.stat_mem_o(stat_mem_o)
      );
-  assign icache_yumi_li = if2_yumi_lo;
-  wire if2_instr_v = ~poison_isd_lo & fe_queue_ready_and_i & icache_data_v_lo;
 
   // This tracks the I$ valid. Could move inside entirely, but we're trying to separate
   //   those responsibilities
@@ -292,68 +290,49 @@ module bp_fe_top
    #(.width_p(3))
    fault_reg
     (.clk_i(clk_i)
-     ,.reset_i(reset_i || poison_if2_lo)
+     ,.reset_i(reset_i || poison_tv_lo)
      ,.en_i(if2_we)
      ,.data_i({ptag_miss_li, instr_access_fault_v, instr_page_fault_v})
      ,.data_o({itlb_miss_r, instr_access_fault_r, instr_page_fault_r})
      );
-  wire if2_exception_v = ~poison_isd_lo & fe_queue_ready_and_i & (instr_access_fault_r | instr_page_fault_r | itlb_miss_r | icache_spec_v_lo);
+  wire if2_exception_v = instr_access_fault_r | instr_page_fault_r | itlb_miss_r | icache_spec_v_lo;
 
-  bp_fe_instr_scan_s icache_instr_scan_lo;
+  bp_fe_realigner
+   #(.bp_params_p(bp_params_p))
+   realigner
+    (.clk_i(clk_i)
+     ,.reset_i(reset_i)
+
+     ,.if2_instr_v_i(icache_data_v_lo)
+     ,.if2_exception_v_i(if2_exception_v)
+     ,.if2_pc_i(if2_pc_lo)
+     ,.if2_data_i(icache_data_lo)
+     ,.if2_taken_branch_site_i(if2_taken_branch_site_lo)
+     ,.if2_yumi_o(icache_yumi_li)
+
+     ,.redirect_v_i(redirect_v_li)
+     ,.redirect_resume_i(redirect_resume_li)
+     ,.redirect_pc_i(redirect_pc_li)
+     ,.redirect_instr_i(redirect_instr_li)
+
+     ,.fetch_instr_v_o(fetch_instr_v_lo)
+     ,.fetch_exception_v_o(fetch_exception_v_lo)
+     ,.fetch_pc_o(fetch_pc_lo)
+     ,.fetch_instr_o(fetch_instr_lo)
+     ,.fetch_partial_o(fetch_partial_lo)
+     ,.fetch_linear_o(fetch_linear_lo)
+     ,.fetch_eager_o(fetch_eager_lo)
+     ,.fetch_scan_o(fetch_scan_lo)
+     ,.fetch_rebase_o(fetch_rebase_lo)
+     ,.fetch_ready_then_i(fetch_ready_then_lo)
+     );
+
   bp_fe_instr_scan
    #(.bp_params_p(bp_params_p))
    instr_scan
-    (.instr_i(icache_data_lo)
-     ,.scan_o(icache_instr_scan_lo)
+    (.instr_i(fetch_instr_lo)
+     ,.scan_o(fetch_instr_scan_lo)
      );
-
-  if (compressed_support_p)
-    begin : realigner
-      bp_fe_realigner
-       #(.bp_params_p(bp_params_p))
-       realigner
-        (.clk_i(clk_i)
-         ,.reset_i(reset_i)
-
-         ,.if2_instr_v_i(if2_instr_v)
-         ,.if2_exception_v_i(if2_exception_v)
-         ,.if2_pc_i(if2_pc_lo)
-         ,.if2_data_i(icache_data_lo)
-         ,.if2_instr_scan_i(icache_instr_scan_lo)
-         ,.if2_taken_branch_site_i(if2_taken_branch_site_lo)
-         ,.if2_yumi_o(if2_yumi_lo)
-
-         ,.redirect_v_i(redirect_v_li)
-         ,.redirect_resume_i(redirect_resume_li)
-         ,.redirect_pc_i(redirect_pc_li)
-         ,.redirect_instr_i(redirect_instr_li)
-
-         ,.fetch_instr_v_o(fetch_instr_v_lo)
-         ,.fetch_exception_v_o(fetch_exception_v_lo)
-         ,.fetch_pc_o(fetch_pc_lo)
-         ,.fetch_instr_o(fetch_instr_lo)
-         ,.fetch_instr_scan_o(fetch_instr_scan_lo)
-         ,.fetch_partial_o(fetch_partial_lo)
-         ,.fetch_linear_o(fetch_linear_lo)
-         ,.fetch_eager_o(fetch_eager_lo)
-         ,.fetch_scan_o(fetch_scan_lo)
-         ,.fetch_rebase_o(fetch_rebase_lo)
-         );
-    end
-  else
-    begin : realigner
-      assign if2_yumi_lo = if2_instr_v | if2_exception_v;
-      assign fetch_instr_v_lo = if2_instr_v;
-      assign fetch_exception_v_lo = if2_exception_v;
-      assign fetch_pc_lo = if2_pc_lo;
-      assign fetch_instr_lo = icache_data_lo;
-      assign fetch_instr_scan_lo = icache_instr_scan_lo;
-      assign fetch_partial_lo = '0;
-      assign fetch_linear_lo = '0;
-      assign fetch_eager_lo = '0;
-      assign fetch_scan_lo = '0;
-      assign fetch_rebase_lo = '0;
-    end
 
   bp_fe_controller
    #(.bp_params_p(bp_params_p))
@@ -393,21 +372,12 @@ module bp_fe_top
      ,.next_pc_i(next_pc_lo)
 
      ,.ovr_i(ovr_lo)
-     ,.poison_if1_o(poison_if1_lo)
+     ,.poison_tl_o(poison_tl_lo)
      ,.if1_we_o(if1_we)
 
      ,.icache_tv_we_i(icache_tv_we)
-     ,.poison_if2_o(poison_if2_lo)
+     ,.poison_tv_o(poison_tv_lo)
      ,.if2_we_o(if2_we)
-
-     ,.if2_instr_v_i(if2_instr_v)
-     ,.if2_exception_v_i(if2_exception_v)
-     ,.if2_itlb_miss_i(itlb_miss_r)
-     ,.if2_instr_page_fault_i(instr_page_fault_r)
-     ,.if2_instr_access_fault_i(instr_access_fault_r)
-     ,.if2_icache_spec_v_i(icache_spec_v_lo)
-     ,.if2_br_metadata_fwd_i(if2_br_metadata_fwd_lo)
-     ,.poison_isd_o(poison_isd_lo)
 
      ,.fetch_instr_v_i(fetch_instr_v_lo)
      ,.fetch_exception_v_i(fetch_exception_v_lo)
@@ -415,6 +385,13 @@ module bp_fe_top
      ,.fetch_instr_i(fetch_instr_lo)
      ,.fetch_partial_i(fetch_partial_lo)
      ,.fetch_eager_i(fetch_eager_lo)
+     ,.fetch_itlb_miss_i(itlb_miss_r)
+     ,.fetch_instr_page_fault_i(instr_page_fault_r)
+     ,.fetch_instr_access_fault_i(instr_access_fault_r)
+     ,.fetch_icache_spec_v_i(icache_spec_v_lo)
+     ,.fetch_br_metadata_fwd_i(if2_br_metadata_fwd_lo)
+
+     ,.fetch_ready_then_o(fetch_ready_then_lo)
 
      ,.itlb_r_v_o(itlb_r_v_li)
      ,.itlb_w_v_o(itlb_w_v_li)

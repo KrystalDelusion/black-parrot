@@ -250,9 +250,8 @@ module bp_fe_icache
   logic spec_tl_r;
   bp_fe_icache_decode_s decode_tl_r;
 
-  // Accept requests when we're in ready state and there's no blocked request in TL
-  // Also accept request when 'forced'
-  assign safe_tl_we = is_ready & v_i & (~v_tl_r | safe_tv_we | force_i) & ~cache_req_lock_i;
+  // Accept requests there's no blocked request in TL or ''forced'
+  assign safe_tl_we = v_i & (force_i || ~v_tl_r || safe_tv_we);
   assign tl_we = safe_tl_we | poison_tl_i;
   assign v_tl_n = yumi_o & ~poison_tl_i;
   bsg_dff_reset_en
@@ -266,7 +265,7 @@ module bp_fe_icache
      ,.data_o(v_tl_r)
      );
 
-  wire v_tl = is_ready & v_tl_r;
+  wire v_tl = is_ready & v_tl_r & ~cache_req_lock_i;
 
   // Save stage information
   bsg_dff_reset_en
@@ -484,7 +483,6 @@ module bp_fe_icache
   wire uncached_req = decode_tv_r.fetch_op &  uncached_tv_r & ~snoop_tv_r & ~hit_v_tv;
   wire inval_req    = decode_tv_r.inval_op & ~snoop_tv_r;
 
-
   assign cache_req_v_o = v_tv & ~spec_tv_r & |{uncached_req, cached_req, inval_req};
   assign cache_req_cast_o =
    '{addr     : `bp_addr_align(paddr_tv_r, 4)
@@ -533,7 +531,7 @@ module bp_fe_icache
       e_ready   : state_n = cache_req_yumi_i ? e_miss : state_r;
       e_miss    : state_n = complete_recv ? e_recover : state_r;
       // e_recover:
-      default  : state_n = e_ready;
+      default  : state_n = safe_tl_we ? e_recover : e_ready;
     endcase
 
   // synopsys sync_set_reset "reset_i"
