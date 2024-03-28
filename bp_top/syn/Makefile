@@ -30,4 +30,5 @@ include $(BP_COMMON_DIR)/syn/Makefile.vcs
 include $(BP_COMMON_DIR)/syn/Makefile.vivado
 include $(BP_COMMON_DIR)/syn/Makefile.xcelium
 include $(BP_COMMON_DIR)/syn/Makefile.yosys
+include $(BP_COMMON_DIR)/syn/Makefile.tabby
 
