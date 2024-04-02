@@ -6,12 +6,16 @@ override REPORT_DIR  := $(REPORT_PATH)/$(TOOL)
 override TOUCH_DIR   := $(TOUCH_PATH)/$(TOOL)
 
 override BUILD_DIR   := $(RESULTS_DIR)/$(TB).$(CFG).$(TAG).build
-$(TOUCH_DIR) $(RESULTS_DIR) $(LOG_DIR) $(REPORT_DIR) $(BUILD_DIR):
+override SYNTH_DIR   := $(RESULTS_DIR)/$(TB).$(CFG).$(TAG).synth
+
+$(TOUCH_DIR) $(RESULTS_DIR) $(LOG_DIR) $(REPORT_DIR) $(BUILD_DIR) $(SYNTH_DIR):
 	mkdir -p $@
 
-.PHONY: build.tabby
+.PHONY: build.tabby synth.tabby
 
 include $(TB_PATH)/$(TB)/Makefile.tabby
+
+MODEL ?= sky130_fd_sc_hd__ff_100C_1v65
 
 build.tabby: $(BUILD_DIR)/synth
 build.tabby: YOSYS_LOG   := $(LOG_DIR)/$(TB).$(CFG).$(TAG).synth.log
@@ -21,6 +25,22 @@ $(SYNTH_COLLATERAL): | $(TOUCH_DIR) $(RESULTS_DIR) $(LOG_DIR) $(REPORT_DIR) $(BU
 $(BUILD_DIR)/synth: $(SYNTH_COLLATERAL)
 	cd $(@D); \
 		yosys -p 'verific -f -sv flist.vcs; hierarchy -top wrapper; stat' -l $(YOSYS_LOG)
+
+## Variables for tcl script
+export FLIST           ?= $(BUILD_DIR)/flist.vcs
+export WRAPPER_ELAB    ?= $(SYNTH_DIR)/wrapper.elab.v
+export WRAPPER_COARSE  ?= $(SYNTH_DIR)/wrapper.coarse.v
+export WRAPPER_FINE    ?= $(SYNTH_DIR)/wrapper.fine.v
+export WRAPPER_MAP     ?= $(SYNTH_DIR)/wrapper.mapped.v
+export WRAPPER_SYNTH   ?= $(SYNTH_DIR)/wrapper.synth.v
+export TIMING_LIB      ?= $(PDK_ROOT)/timing/$(MODEL).lib
+
+synth.tabby: $(SYNTH_DIR)/synth_tabby
+synth.tabby: SYNTH_LOG     := $(LOG_DIR)/$(TB).$(CFG).$(TAG).synth.log
+$(SYNTH_COLLATERAL): | $(TOUCH_DIR) $(RESULTS_DIR) $(LOG_DIR) $(REPORT_DIR) $(SYNTH_DIR)
+$(SYNTH_DIR)/synth_tabby: $(SYNTH_COLLATERAL)
+	-cd $(SYNTH_DIR); \
+		$(YOSYS) -c $(BP_COMMON_DIR)/syn/tcl/tabby_synth.tcl -l $(SYNTH_LOG)
 
 clean.tabby:
 	@-rm -rf touchfiles/tabby
